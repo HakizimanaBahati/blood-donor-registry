@@ -115,8 +115,16 @@ NEXT_PUBLIC_ALLOW_DEV_LOGIN=true
 ```
 
 The placeholder Supabase values are fine for offline UI work. Replace them with real
-**public anon** values to use Supabase Auth. Never put a service-role key, JWT secret or
-database URL in `frontend/.env*`.
+**public** values to use Supabase Auth. Supabase's newer publishable key
+(`sb_publishable_...`) can be supplied as either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`; both names are supported. Never put a `sb_secret_...` key,
+service-role key, JWT secret or database URL in `frontend/.env*`.
+
+For a hosted project, also set `SUPABASE_URL` (and optionally `SUPABASE_JWKS_URL`) in
+`backend/.env` so Django can verify real access tokens. The Python backend does **not** use
+`@supabase/server` or a Supabase secret key: it verifies JWTs directly against the project
+JWKS endpoint. Set `DATABASE_URL` to the Supabase Postgres connection string only when the
+database password is available.
 
 ### 5. Offline demo login
 

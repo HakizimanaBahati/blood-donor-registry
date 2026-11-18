@@ -22,3 +22,5 @@ Every non-obvious choice is recorded here so the project can be defended in clas
 | D16 | `jsdom` pinned to 28.0.0 and `eslint` to 9.39.5 | Node 24.14.1 compatibility and `eslint-config-next@16.4.6` peer range | All frontend checks pass without `--force` |
 | D17 | ESLint flat config imports `eslint-config-next` directly | Next 16 ships flat configs; `FlatCompat` produced a circular-config error | `npm run lint` is clean |
 | D18 | One `react-hooks/set-state-in-effect` rule exception for data/auth hooks | Initial data loading and Supabase auth bootstrap intentionally synchronise React state with external async systems | Scoped in `frontend/eslint.config.mjs` with an explanatory comment |
+| D19 | Do not install `@supabase/server` in this project | The API is Python/Django; `@supabase/server` is a Node/Edge-Function utility. Django verifies Supabase JWTs directly via JWKS | No unnecessary npm dependency in the backend |
+| D20 | Support both `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase's newer publishable keys use the `sb_publishable_...` format | Existing env files keep working; publishable keys stay client-safe |

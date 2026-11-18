@@ -7,7 +7,12 @@ import { DEV_TOKEN_KEY } from "@/lib/constants";
 // Placeholders keep the app renderable without a Supabase project. Real Auth
 // only works when both public environment variables are configured.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:54321";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "local-anon-key-placeholder";
+// Supabase's newer publishable key (sb_publishable_...) replaces the legacy anon key.
+// Support both names so existing .env files keep working.
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "local-anon-key-placeholder";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

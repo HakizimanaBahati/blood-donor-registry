@@ -32,9 +32,14 @@ ALLOWED_HOSTS = [
 ]
 
 # ── Database ──────────────────────────────────────────────────────────────────
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("TEST_DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL and DEBUG:
+    DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("Set DATABASE_URL (Supabase PostgreSQL) or TEST_DATABASE_URL (local tests)")
+    raise RuntimeError(
+        "DATABASE_URL must be set when DJANGO_DEBUG is false; "
+        "TEST_DATABASE_URL is only allowed in local development"
+    )
 
 DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=0)}
 DATABASES["default"].setdefault("OPTIONS", {})

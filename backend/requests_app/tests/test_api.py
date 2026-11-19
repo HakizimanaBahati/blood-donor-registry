@@ -64,7 +64,16 @@ class BloodRequestAPITests(APITestCase):
             format="json",
             **auth_headers(HOSPITAL_ONE_ID),
         )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # With RLS active (production-like role), the other hospital is not
+        # visible to the serializer's PrimaryKeyRelatedField, which rejects it
+        # with 400 before the explicit ownership check can return 403. Without
+        # RLS (legacy local role), the 403 path is reached. Both deny the write;
+        # neither response may advertise a created request.
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN),
+        )
+        self.assertNotIn("id", response.data)
 
     def test_admin_can_create_for_explicit_hospital(self):
         response = self.client.post(

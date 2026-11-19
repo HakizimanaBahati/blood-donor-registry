@@ -36,6 +36,7 @@ class SupabaseClaimsMiddleware:
                         "SELECT set_config('request.jwt.claim.role', %s, true)",
                         ["authenticated"],
                     )
+                    cursor.execute("SET LOCAL ROLE authenticated")
             response = self.get_response(request)
 
         return response

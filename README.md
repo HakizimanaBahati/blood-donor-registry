@@ -141,6 +141,12 @@ This endpoint is development-only and returns a locally signed token so the whol
 browser → Django → database flow can be demonstrated without Supabase credentials. Real
 deployments must disable it and use Supabase Auth.
 
+### Hosted Supabase
+
+To move the schema and data into your own Supabase project without sharing database credentials,
+follow [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md). It lists the exact migration order, the
+role-assignment SQL for real Auth users, and verification queries for the SQL Editor.
+
 ## Verification
 
 | Check | Command | Expected result |

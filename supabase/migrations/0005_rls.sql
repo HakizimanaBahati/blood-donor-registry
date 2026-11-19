@@ -4,7 +4,7 @@
 -- code using DRF permissions, so security does not rely on one layer alone.
 
 -- ── Grants: anon gets nothing ────────────────────────────────────────────────
-REVOKE ALL ON public.donors, public.hospitals, public.profiles, public.requests FROM anon, PUBLIC;
+REVOKE ALL ON public.donors, public.hospitals, public.profiles, public.requests FROM anon, authenticated, PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.donors, public.hospitals, public.requests TO authenticated;
 
 -- Profiles: users may read their own row and change only their display name.

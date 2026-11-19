@@ -25,7 +25,11 @@ INSERT INTO public.donors (id, name, blood_type, last_donation, phone) VALUES
     ('a0000010-0000-4000-8000-000000000010', '[TEST] James Whitfield', 'A+',  CURRENT_DATE - INTERVAL '45 days',  '+15550102010'),
     ('a0000011-0000-4000-8000-000000000011', '[TEST] Kara Singh',      'O-',  CURRENT_DATE - INTERVAL '365 days', '+15550102011'),
     ('a0000012-0000-4000-8000-000000000012', '[TEST] Liam Turner',     'B+',  NULL,                               '+15550102012')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE
+    SET blood_type    = EXCLUDED.blood_type,
+        last_donation = EXCLUDED.last_donation,
+        phone         = EXCLUDED.phone
+    WHERE public.donors.name LIKE '[TEST]%';
 
 INSERT INTO public.requests (id, hospital_id, blood_type, units, status, notes) VALUES
     ('c0000001-0000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111', 'O+',  4, 'pending',   '[TEST] Routine stock replenishment'),

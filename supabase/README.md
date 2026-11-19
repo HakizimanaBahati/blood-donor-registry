@@ -63,6 +63,11 @@ so a misconfigured database role cannot by itself bypass authorisation.
 .\scripts\local-db.ps1 stop
 ```
 
+On Windows, `local-db.ps1` registers a dedicated `BDRLocalPG` service running as
+`NetworkService`. This is required because PostgreSQL refuses to run under an elevated
+token, and the service keeps the server alive after the invoking shell exits. No existing
+PostgreSQL installation or service is modified.
+
 `apply-local-migrations.ps1` first creates a minimal `auth.users` stand-in
 (`supabase/local/0000_auth_emulation.sql`) so the real migrations and seed can run on a
 plain PostgreSQL cluster. It ends by running `tests/verify_database.sql`, which asserts

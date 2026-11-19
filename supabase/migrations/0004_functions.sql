@@ -9,6 +9,7 @@ CREATE OR REPLACE FUNCTION public.bdr_uid()
 RETURNS uuid
 LANGUAGE sql
 STABLE
+SET search_path = public, pg_temp
 AS $fn$
     SELECT coalesce(
         nullif(current_setting('request.jwt.claim.sub', true), '')::uuid,
@@ -21,7 +22,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public
 AS $fn$
     SELECT EXISTS (
         SELECT 1 FROM public.profiles p
@@ -34,7 +35,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public
 AS $fn$
     SELECT EXISTS (
         SELECT 1 FROM public.profiles p
@@ -48,15 +49,25 @@ RETURNS uuid
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public
 AS $fn$
     SELECT p.hospital_id FROM public.profiles p
     WHERE p.id = public.bdr_uid() AND p.role = 'hospital';
 $fn$;
 
+-- Policy helper functions are executed as `authenticated` by the RLS policies.
+-- Remove the default PUBLIC/anon EXECUTE grant, but keep the grant RLS requires.
+REVOKE ALL ON FUNCTION public.bdr_is_admin() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.bdr_is_admin() TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.bdr_is_hospital() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.bdr_is_hospital() TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.bdr_hospital_id() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.bdr_hospital_id() TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $fn$
 BEGIN
     NEW.updated_at := now();
@@ -88,10 +99,10 @@ CREATE OR REPLACE FUNCTION public.assign_role(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public
 AS $fn$
 BEGIN
-    IF p_role NOT IN ('admin', 'hospital') THEN
+    IF p_role IS NULL OR p_role NOT IN ('admin', 'hospital') THEN
         RAISE EXCEPTION 'Invalid role: %', p_role;
     END IF;
 

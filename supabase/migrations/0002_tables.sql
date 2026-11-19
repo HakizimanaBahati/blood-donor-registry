@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS public.donors (
     CONSTRAINT donors_blood_type_valid CHECK (
         blood_type IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')
     ),
-    CONSTRAINT donors_phone_format CHECK (phone ~ '^\+?[0-9][0-9() .-]{6,35}$')
+    -- Use [+] rather than \+ so the regex is valid under standard_conforming_strings.
+    CONSTRAINT donors_phone_format CHECK (phone ~ '^[+]?[0-9][0-9() .-]{6,35}$')
 );
 
 COMMENT ON COLUMN public.donors.last_donation IS
@@ -38,7 +39,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     id           uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name    varchar(200) NOT NULL,
     role         varchar(20) NOT NULL,
-    hospital_id  uuid REFERENCES public.hospitals(id) ON DELETE SET NULL,
+    hospital_id  uuid REFERENCES public.hospitals(id) ON DELETE RESTRICT,
     created_at   timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT profiles_role_valid CHECK (role IN ('admin', 'hospital')),
     CONSTRAINT profiles_role_hospital_consistent CHECK (
@@ -54,7 +55,7 @@ COMMENT ON TABLE public.profiles IS
 -- ── Blood requests ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.requests (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    hospital_id         uuid NOT NULL REFERENCES public.hospitals(id) ON DELETE CASCADE,
+    hospital_id         uuid NOT NULL REFERENCES public.hospitals(id) ON DELETE RESTRICT,
     blood_type          varchar(3) NOT NULL,
     units               integer NOT NULL,
     status              varchar(20) NOT NULL DEFAULT 'pending',

@@ -45,7 +45,13 @@ In **SQL Editor → New query**, paste and run each file below in this exact ord
 4. `supabase/migrations/0004_functions.sql`
 5. `supabase/migrations/0005_rls.sql`
 6. `supabase/migrations/0006_request_donor_link.sql`
-7. `supabase/seed.sql`
+7. `supabase/migrations/0009_harden_function_search_paths.sql`
+8. `supabase/seed.sql`
+
+> The live project also contains corrective migrations `0007_fix_donors_phone_regex` and
+> `0008_fix_donors_phone_regex_literal_plus`, which fixed the donor phone CHECK expression after
+> the first apply. `0002_tables.sql` now contains the corrected `[+]` expression, so fresh projects
+> do not need those two corrective migrations.
 
 You can open each file from your local clone and paste its full contents into the editor.
 

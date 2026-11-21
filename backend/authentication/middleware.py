@@ -20,10 +20,12 @@ class SupabaseClaimsMiddleware:
             token = header.split(None, 1)[1].strip()
             try:
                 verified = verify_access_token(token)
-            except SupabaseTokenError:
+            except SupabaseTokenError as exc:
                 verified = None  # DRF will produce the correct 401 response later
+                request.supabase_auth_error = exc
             else:
                 request.verified_token = verified
+                request.supabase_auth_error = None
 
         with transaction.atomic():
             if verified:

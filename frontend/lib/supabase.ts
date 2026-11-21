@@ -47,6 +47,11 @@ export async function getAccessToken(): Promise<string | null> {
     if (devToken) return devToken;
   }
 
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session?.access_token) return null;
+    return data.session.access_token;
+  } catch {
+    return null;
+  }
 }

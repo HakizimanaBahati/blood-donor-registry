@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/lib/api";
 import { clearDevToken, getAccessToken, setDevToken, supabase } from "@/lib/supabase";
@@ -30,21 +30,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  const refreshSeq = useRef(0);
 
   const refresh = useCallback(async (explicitToken?: string | null): Promise<Profile | null> => {
+    const seq = ++refreshSeq.current;
     setError(null);
     try {
       const token = explicitToken !== undefined ? explicitToken : await getAccessToken();
+      if (seq !== refreshSeq.current) return null;
       if (!token) {
         setProfile(null);
         setStatus("unauthenticated");
         return null;
       }
       const result = await fetchProfile(token);
+      if (seq !== refreshSeq.current) return null;
       setProfile(result);
       setStatus("authenticated");
       return result;
     } catch (reason) {
+      if (seq !== refreshSeq.current) return null;
       setProfile(null);
       setStatus("unauthenticated");
       setError(messageOf(reason));
@@ -55,14 +60,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
 
-    const { data } = supabase.auth.onAuthStateChange((event) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
         clearDevToken();
         setProfile(null);
         setStatus("unauthenticated");
         return;
       }
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") void refresh();
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        const accessToken = session?.access_token ?? null;
+        void refresh(accessToken ?? undefined);
+      }
     });
 
     return () => data.subscription.unsubscribe();
@@ -72,12 +80,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string): Promise<Profile | null> => {
       setError(null);
       clearDevToken();
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) {
         setError(authError.message);
         return null;
       }
-      return refresh();
+      const accessToken = data.session?.access_token ?? null;
+      if (!accessToken) {
+        setProfile(null);
+        setStatus("unauthenticated");
+        setError("Sign-in succeeded but no access token was returned. Please try again.");
+        return null;
+      }
+      return refresh(accessToken);
     },
     [refresh],
   );

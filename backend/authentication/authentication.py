@@ -26,6 +26,9 @@ class SupabaseJWTAuthentication(BaseAuthentication):
 
         # The middleware may already have verified this token for RLS claims.
         verified = getattr(request, "verified_token", None)
+        auth_error = getattr(request, "supabase_auth_error", None)
+        if verified is None and auth_error is not None:
+            raise AuthenticationFailed(str(auth_error)) from auth_error
         if verified is None:
             try:
                 verified = verify_access_token(token)

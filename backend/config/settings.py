@@ -61,6 +61,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "authentication.middleware.SupabaseClaimsMiddleware",
 ]
@@ -100,6 +101,35 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = False
+
+# ── CSRF / HTTPS hardening ────────────────────────────────────────────────────
+# Trusted origins are supplied explicitly by the deployment environment when
+# Django CSRF protection is needed. They are deliberately not derived from CORS,
+# and no Render/Vercel domains are hardcoded here.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+# HTTPS is terminated at Render initially. Do not redirect at the Django layer
+# and do not trust X-Forwarded-Proto until Render's proxy behaviour is verified.
+SECURE_SSL_REDIRECT = False
+# SECURE_PROXY_SSL_HEADER is intentionally left unset.
+
+# HSTS rolls out in later stages; includeSubDomains and preload require separate
+# review because they affect every subdomain and can be difficult to reverse.
+SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
 # ── Supabase Auth / JWT verification ──────────────────────────────────────────
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")

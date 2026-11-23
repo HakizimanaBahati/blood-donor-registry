@@ -101,9 +101,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithPassword = useCallback(
     async (email: string, password: string): Promise<Profile | null> => {
       setError(null);
+      refreshSeq.current += 1;
       clearDevToken();
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) {
+        recoveryRef.current = false;
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          // A sign-out transport failure must not restore or reuse the old session.
+        }
+        setProfile(null);
+        setStatus("unauthenticated");
         setError(authError.message);
         return null;
       }

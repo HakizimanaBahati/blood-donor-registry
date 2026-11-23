@@ -90,6 +90,129 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("authenticated"));
     expect(mocks.fetchProfile).toHaveBeenCalledWith("returned-access-token");
     expect(mocks.fetchProfile.mock.calls.every((c) => c[0] !== "returned-refresh-token")).toBe(true);
+    expect(mocks.signOut).not.toHaveBeenCalled();
+  });
+
+  it("failed password login clears a persisted session without another /api/auth/me/ call", async () => {
+    const previousProfile: Profile = {
+      id: "1",
+      full_name: "Admin",
+      role: "admin",
+      hospital_id: null,
+    };
+    mocks.getAccessToken.mockResolvedValue("previous-token");
+    mocks.fetchProfile.mockResolvedValue(previousProfile);
+    mocks.signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: "Invalid login credentials" },
+    });
+    mocks.signOut.mockImplementation(async () => {
+      mocks.authStateCallback?.("SIGNED_OUT", null);
+      return { error: null };
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("authenticated"));
+    await waitFor(() => expect(screen.getByTestId("profile").textContent).toBe("Admin"));
+
+    const profileCallsBeforeFailure = mocks.fetchProfile.mock.calls.length;
+
+    await act(async () => {
+      screen.getByText("login").click();
+    });
+
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("unauthenticated"));
+    expect(screen.getByTestId("profile").textContent).toBe("");
+    expect(screen.getByTestId("error").textContent).toBe("Invalid login credentials");
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(mocks.clearDevToken).toHaveBeenCalled();
+    expect(mocks.fetchProfile).toHaveBeenCalledTimes(profileCallsBeforeFailure);
+  });
+
+  it("failed password login invalidates an in-flight profile refresh", async () => {
+    const previousProfile: Profile = {
+      id: "1",
+      full_name: "Admin",
+      role: "admin",
+      hospital_id: null,
+    };
+    let resolveInitialProfile: ((profile: Profile) => void) | undefined;
+    mocks.getAccessToken.mockResolvedValue("previous-token");
+    mocks.fetchProfile.mockImplementationOnce(
+      () =>
+        new Promise<Profile>((resolve) => {
+          resolveInitialProfile = resolve;
+        }),
+    );
+    mocks.signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: "Invalid login credentials" },
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(mocks.fetchProfile).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("status").textContent).toBe("loading");
+
+    await act(async () => {
+      screen.getByText("login").click();
+    });
+
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("unauthenticated"));
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    const profileCallsAfterFailure = mocks.fetchProfile.mock.calls.length;
+
+    await act(async () => {
+      resolveInitialProfile?.(previousProfile);
+    });
+
+    expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+    expect(screen.getByTestId("profile").textContent).toBe("");
+    expect(mocks.fetchProfile).toHaveBeenCalledTimes(profileCallsAfterFailure);
+  });
+
+  it("failed password login preserves the original error when local sign-out fails", async () => {
+    const previousProfile: Profile = {
+      id: "1",
+      full_name: "Admin",
+      role: "admin",
+      hospital_id: null,
+    };
+    mocks.getAccessToken.mockResolvedValue("previous-token");
+    mocks.fetchProfile.mockResolvedValue(previousProfile);
+    mocks.signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: "Invalid login credentials" },
+    });
+    mocks.signOut.mockRejectedValue(new Error("network unavailable"));
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("authenticated"));
+    const profileCallsBeforeFailure = mocks.fetchProfile.mock.calls.length;
+
+    await act(async () => {
+      screen.getByText("login").click();
+    });
+
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("unauthenticated"));
+    expect(screen.getByTestId("profile").textContent).toBe("");
+    expect(screen.getByTestId("error").textContent).toBe("Invalid login credentials");
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(mocks.fetchProfile).toHaveBeenCalledTimes(profileCallsBeforeFailure);
   });
 
   it("missing session does not send an authenticated request", async () => {
@@ -189,7 +312,8 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("unauthenticated"));
     expect(screen.getByTestId("profile").textContent).toBe("");
     expect(mocks.clearDevToken).toHaveBeenCalled();
-    expect(mocks.signOut).toHaveBeenCalled();
+    expect(mocks.signOut).toHaveBeenCalledTimes(1);
+    expect(mocks.signOut.mock.calls[0]).toEqual([]);
   });
 
   it("no refresh_token is sent to Django", async () => {

@@ -131,8 +131,13 @@ def _db_identity_view(request):
     )
 
 
+def _raise_after_identity_view(request):
+    raise RuntimeError("test middleware rollback")
+
+
 urlpatterns = [
-    path("__middleware-db-identity__/", _db_identity_view, name="middleware-db-identity")
+    path("__middleware-db-identity__/", _db_identity_view, name="middleware-db-identity"),
+    path("__middleware-raise__/", _raise_after_identity_view, name="middleware-raise"),
 ]
 
 
@@ -168,3 +173,24 @@ class MiddlewareDatabaseTests(TestCase):
         outside = self._identity()
         self.assertNotEqual(outside["current_user"], "authenticated")
         self.assertFalse(outside["claim_sub"])
+
+    def test_identity_context_not_leaked_when_view_raises_after_valid_token(self):
+        # Valid token, but the view raises after middleware set transaction-local identity.
+        from django.urls import reverse
+
+        with self.assertRaises(RuntimeError):
+            self.client.get(reverse("middleware-raise"), **auth_headers(HOSPITAL_ONE_ID))
+
+        # Subsequent unauthenticated request must not see leaked authenticated context.
+        probe = self._identity()
+        self.assertNotEqual(probe["current_user"], "authenticated")
+        self.assertFalse(probe["claim_sub"])
+        self.assertFalse(probe["claim_role"])
+
+        # Optional follow-up: a different valid identity should be established cleanly.
+        from common.test_helpers import HOSPITAL_TWO_ID
+
+        probe2 = self._identity(**auth_headers(HOSPITAL_TWO_ID))
+        self.assertEqual(probe2["current_user"], "authenticated")
+        self.assertEqual(probe2["claim_sub"], str(HOSPITAL_TWO_ID))
+        self.assertEqual(probe2["claim_role"], "authenticated")

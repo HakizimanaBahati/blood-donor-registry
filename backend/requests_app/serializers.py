@@ -59,7 +59,12 @@ class BloodRequestSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         extra_kwargs = {
-            "notes": {"required": False, "allow_blank": True, "allow_null": True},
+            "notes": {
+                "required": False,
+                "allow_blank": True,
+                "allow_null": True,
+                "max_length": 1000,
+            },
             "status": {"required": False},
             "units": {"min_value": 1, "max_value": 10000},
         }

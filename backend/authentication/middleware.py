@@ -59,6 +59,12 @@ class SupabaseClaimsMiddleware:
                         ["authenticated"],
                     )
                     cursor.execute("SET LOCAL ROLE authenticated")
-            response = self.get_response(request)
-
-        return response
+            try:
+                response = self.get_response(request)
+            except Exception:
+                transaction.set_rollback(True)
+                raise
+            status_code = getattr(response, "status_code", None)
+            if isinstance(status_code, int) and status_code >= 500:
+                transaction.set_rollback(True)
+            return response

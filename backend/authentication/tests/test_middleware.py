@@ -135,9 +135,73 @@ def _raise_after_identity_view(request):
     raise RuntimeError("test middleware rollback")
 
 
+def _write_then_raise_view(request):
+    from django.utils import timezone
+
+    from donors.models import Donor
+
+    now = timezone.now()
+    Donor.objects.create(
+        name="__middleware-rollback-test-donor__",
+        blood_type="A+",
+        phone="+10000000000",
+        created_at=now,
+        updated_at=now,
+    )
+    raise RuntimeError("test write rollback")
+
+
+def _nested_write_then_raise_view(request):
+    from django.db import transaction
+    from django.utils import timezone
+
+    from donors.models import Donor
+
+    now = timezone.now()
+    with transaction.atomic():
+        Donor.objects.create(
+            name="__middleware-nested-rollback-donor__",
+            blood_type="A+",
+            phone="+10000000001",
+            created_at=now,
+            updated_at=now,
+        )
+    raise RuntimeError("test nested write rollback")
+
+
+def _nested_write_then_return_500_view(request):
+    from django.db import transaction
+    from django.http import HttpResponse
+    from django.utils import timezone
+
+    from donors.models import Donor
+
+    now = timezone.now()
+    with transaction.atomic():
+        Donor.objects.create(
+            name="__middleware-nested-500-rollback-donor__",
+            blood_type="A+",
+            phone="+10000000002",
+            created_at=now,
+            updated_at=now,
+        )
+    return HttpResponse("boom", status=500)
+
+
 urlpatterns = [
     path("__middleware-db-identity__/", _db_identity_view, name="middleware-db-identity"),
     path("__middleware-raise__/", _raise_after_identity_view, name="middleware-raise"),
+    path("__middleware-write-raise__/", _write_then_raise_view, name="middleware-write-raise"),
+    path(
+        "__middleware-nested-write-raise__/",
+        _nested_write_then_raise_view,
+        name="middleware-nested-write-raise",
+    ),
+    path(
+        "__middleware-nested-write-500__/",
+        _nested_write_then_return_500_view,
+        name="middleware-nested-write-500",
+    ),
 ]
 
 
@@ -194,3 +258,70 @@ class MiddlewareDatabaseTests(TestCase):
         self.assertEqual(probe2["current_user"], "authenticated")
         self.assertEqual(probe2["claim_sub"], str(HOSPITAL_TWO_ID))
         self.assertEqual(probe2["claim_role"], "authenticated")
+
+    def test_write_followed_by_exception_is_rolled_back(self):
+        # A DB write inside the request that then raises must not be committed (middleware atomic rollback).
+        from django.urls import reverse
+
+        from common.test_helpers import ADMIN_ID
+        from donors.models import Donor
+
+        with self.assertRaises(RuntimeError):
+            self.client.get(reverse("middleware-write-raise"), **auth_headers(ADMIN_ID))
+
+        self.assertFalse(
+            Donor.objects.filter(name="__middleware-rollback-test-donor__").exists()
+        )
+
+    def test_alternating_hospital_identities_after_failed_request(self):
+        from django.urls import reverse
+
+        from common.test_helpers import HOSPITAL_TWO_ID
+
+        with self.assertRaises(RuntimeError):
+            self.client.get(reverse("middleware-raise"), **auth_headers(HOSPITAL_ONE_ID))
+        probe1 = self._identity()
+        self.assertNotEqual(probe1["current_user"], "authenticated")
+        self.assertFalse(probe1["claim_sub"])
+
+        probe2 = self._identity(**auth_headers(HOSPITAL_TWO_ID))
+        self.assertEqual(probe2["current_user"], "authenticated")
+        self.assertEqual(probe2["claim_sub"], str(HOSPITAL_TWO_ID))
+        self.assertEqual(probe2["claim_role"], "authenticated")
+
+    def test_nested_atomic_write_followed_by_exception_is_rolled_back(self):
+        # View opens a nested transaction.atomic() (savepoint) around a write, then raises.
+        # Middleware wraps the request in transaction.atomic() and on Exception sets rollback+re-raises.
+        # Expected: the entire middleware request transaction is rolled back, so the nested write is not committed.
+        from django.urls import reverse
+
+        from common.test_helpers import ADMIN_ID
+        from donors.models import Donor
+
+        with self.assertRaises(RuntimeError):
+            self.client.get(reverse("middleware-nested-write-raise"), **auth_headers(ADMIN_ID))
+
+        self.assertFalse(
+            Donor.objects.filter(name="__middleware-nested-rollback-donor__").exists()
+        )
+
+    def test_nested_atomic_write_followed_by_500_response_is_rolled_back(self):
+        # View opens nested transaction.atomic(), writes, exits nested block, then returns HTTP 500 (no exception).
+        # Middleware must mark rollback on 5xx and the nested write must not persist.
+        from django.urls import reverse
+
+        from common.test_helpers import ADMIN_ID
+        from donors.models import Donor
+
+        response = self.client.get(reverse("middleware-nested-write-500"), **auth_headers(ADMIN_ID))
+        self.assertEqual(response.status_code, 500)
+
+        self.assertFalse(
+            Donor.objects.filter(name="__middleware-nested-500-rollback-donor__").exists()
+        )
+
+        # Request-scoped transaction-local identity should be discarded after the request.
+        probe = self._identity()
+        self.assertNotEqual(probe["current_user"], "authenticated")
+        self.assertFalse(probe["claim_sub"])
+        self.assertFalse(probe["claim_role"])

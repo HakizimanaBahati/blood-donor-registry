@@ -1,8 +1,12 @@
+import logging
+
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 
 from authentication.jwt import SupabaseTokenError, verify_access_token
 from authentication.services import get_app_user
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseJWTAuthentication(BaseAuthentication):
@@ -12,16 +16,48 @@ class SupabaseJWTAuthentication(BaseAuthentication):
 
     def authenticate(self, request):
         header = get_authorization_header(request)
+        raw_header_present = bool(header)
+        parts = header.split() if header else []
+        scheme = parts[0].decode("ascii", "ignore") if parts else ""
+        token_present = len(parts) == 2 and bool(parts[1])
+        request_id = getattr(request, "auth_debug_request_id", None)
+
+        logger.info(
+            "Auth.authenticate invoked",
+            extra={
+                "auth_path": request.path,
+                "auth_method": request.method,
+                "auth_request_id": request_id,
+                "auth_header_present": raw_header_present,
+                "auth_scheme": scheme,
+                "auth_token_present": token_present,
+                "auth_logger_name": logger.name,
+                "auth_logger_effective_level": logging.getLevelName(logger.getEffectiveLevel()),
+            },
+        )
+
         if not header:
             return None
 
-        parts = header.split()
-        if len(parts) != 2 or parts[0].decode("ascii", "ignore").lower() != self.keyword.lower():
+        if len(parts) != 2 or scheme.lower() != self.keyword.lower():
+            logger.warning(
+                "Authentication failed: malformed Authorization header",
+                extra={
+                    "auth_path": request.path,
+                    "auth_method": request.method,
+                    "auth_request_id": request_id,
+                    "auth_header_parts": len(parts),
+                },
+            )
             raise AuthenticationFailed("Authorization header must use the Bearer scheme.")
 
         try:
             token = parts[1].decode("ascii")
         except UnicodeDecodeError as exc:
+            logger.warning(
+                "Authentication failed: undecodable Authorization token",
+                extra={"auth_path": request.path, "auth_method": request.method, "auth_request_id": request_id},
+            )
             raise AuthenticationFailed("Authorization token contains invalid characters.") from exc
 
         # The middleware may already have verified this token for RLS claims.

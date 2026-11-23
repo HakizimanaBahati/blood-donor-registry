@@ -7,7 +7,7 @@ import { clearDevToken, getAccessToken, setDevToken, supabase } from "@/lib/supa
 import { devLogin, fetchProfile, requestLogout, type DemoUser } from "@/services/auth";
 import type { Profile } from "@/types";
 
-type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "recovery";
 
 interface AuthContextValue {
   profile: Profile | null;
@@ -16,7 +16,9 @@ interface AuthContextValue {
   signInWithPassword: (email: string, password: string) => Promise<Profile | null>;
   signInWithDemo: (user: DemoUser) => Promise<Profile | null>;
   signOut: () => Promise<void>;
-  refresh: () => Promise<Profile | null>;
+  refresh: (explicitToken?: string | null) => Promise<Profile | null>;
+  completeRecovery: () => Promise<Profile | null>;
+  markRecovery: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const refreshSeq = useRef(0);
+  const recoveryRef = useRef(false);
 
   const refresh = useCallback(async (explicitToken?: string | null): Promise<Profile | null> => {
     const seq = ++refreshSeq.current;
@@ -40,11 +43,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (seq !== refreshSeq.current) return null;
       if (!token) {
         setProfile(null);
-        setStatus("unauthenticated");
+        setStatus(recoveryRef.current ? "recovery" : "unauthenticated");
+        return null;
+      }
+      if (recoveryRef.current) {
+        setProfile(null);
+        setStatus("recovery");
         return null;
       }
       const result = await fetchProfile(token);
       if (seq !== refreshSeq.current) return null;
+      recoveryRef.current = false;
       setProfile(result);
       setStatus("authenticated");
       return result;
@@ -61,13 +70,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        recoveryRef.current = true;
+        setProfile(null);
+        setStatus("recovery");
+        setError(null);
+        return;
+      }
       if (event === "SIGNED_OUT") {
         clearDevToken();
+        recoveryRef.current = false;
         setProfile(null);
         setStatus("unauthenticated");
         return;
       }
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (recoveryRef.current) {
+          setProfile(null);
+          setStatus("recovery");
+          return;
+        }
         const accessToken = session?.access_token ?? null;
         void refresh(accessToken ?? undefined);
       }
@@ -112,6 +134,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const markRecovery = useCallback(() => {
+    refreshSeq.current += 1;
+    recoveryRef.current = true;
+    setProfile(null);
+    setError(null);
+    setStatus("recovery");
+  }, []);
+
+  const completeRecovery = useCallback(async (): Promise<Profile | null> => {
+    recoveryRef.current = false;
+    return refresh();
+  }, [refresh]);
+
   const signOut = useCallback(async () => {
     try {
       await requestLogout();
@@ -119,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Django is stateless; discarding the token below is what actually signs out.
     }
     clearDevToken();
+    recoveryRef.current = false;
     await supabase.auth.signOut();
     setProfile(null);
     setStatus("unauthenticated");
@@ -134,8 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithDemo,
       signOut,
       refresh,
+      completeRecovery,
+      markRecovery,
     }),
-    [profile, status, error, signInWithPassword, signInWithDemo, signOut, refresh],
+    [profile, status, error, signInWithPassword, signInWithDemo, signOut, refresh, completeRecovery, markRecovery],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

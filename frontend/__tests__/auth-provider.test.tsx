@@ -2,6 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
+import type { Profile } from "@/types";
+
+type MockSession = { access_token?: string; refresh_token?: string } | null;
+type AuthStateCallback = (event: string, session: MockSession) => void;
 
 const mocks = vi.hoisted(() => {
   return {
@@ -15,7 +19,7 @@ const mocks = vi.hoisted(() => {
     signOut: vi.fn(),
     onAuthStateChange: vi.fn(),
     unsubscribe: vi.fn(),
-    authStateCallback: null as null | ((event: string, session: any) => void),
+    authStateCallback: null as null | AuthStateCallback,
   };
 });
 
@@ -56,7 +60,7 @@ describe("AuthProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authStateCallback = null;
-    mocks.onAuthStateChange.mockImplementation((cb: any) => {
+    mocks.onAuthStateChange.mockImplementation((cb: AuthStateCallback) => {
       mocks.authStateCallback = cb;
       return { data: { subscription: { unsubscribe: mocks.unsubscribe } } };
     });
@@ -135,8 +139,8 @@ describe("AuthProvider", () => {
   });
 
   it("concurrent refresh calls cannot overwrite newer authentication state", async () => {
-    let resolveOld: ((v: any) => void) | undefined;
-    let resolveNew: ((v: any) => void) | undefined;
+    let resolveOld: ((v: Profile | null) => void) | undefined;
+    let resolveNew: ((v: Profile | null) => void) | undefined;
     mocks.getAccessToken.mockResolvedValue("old-token");
     mocks.fetchProfile
       .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))

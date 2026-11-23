@@ -135,6 +135,11 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": "INFO"},
     "loggers": {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
-        "authentication": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        # Per-request auth diagnostics are useful locally but too noisy in production.
+        "authentication": {
+            "handlers": ["console"],
+            "level": "INFO" if DEBUG else "WARNING",
+            "propagate": False,
+        },
     },
 }

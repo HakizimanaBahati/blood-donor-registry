@@ -7,7 +7,7 @@ import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { LoadingState } from "@/components/StateViews";
 import { dashboardPath } from "@/lib/navigation";
-import { isDevLoginEnabled } from "@/lib/supabase";
+import { isDevLoginEnabled, supabase } from "@/lib/supabase";
 import type { DemoUser } from "@/services/auth";
 import type { Role } from "@/types";
 
@@ -32,8 +32,17 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (status === "recovery") {
+      router.replace("/auth/reset-password");
+      return;
+    }
     if (status === "authenticated" && profile) {
       router.replace(safeDestination(nextPath, profile.role));
     }
@@ -54,6 +63,30 @@ function LoginForm() {
     const result = await signInWithDemo(user);
     setBusy(null);
     if (!result) setLocalError("Demo sign-in failed. Is the Django server running with DEBUG enabled?");
+  }
+
+  async function handleForgotPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setForgotBusy(true);
+    setForgotError(null);
+    setForgotMessage(null);
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+        redirectTo,
+      });
+      if (resetError) {
+        setForgotError("Unable to send a password reset email right now. Please try again later.");
+        return;
+      }
+      setForgotMessage(
+        "If an account exists for that email address, a password reset link has been sent.",
+      );
+    } catch {
+      setForgotError("Unable to send a password reset email right now. Please try again later.");
+    } finally {
+      setForgotBusy(false);
+    }
   }
 
   const showError = localError ?? error;
@@ -128,6 +161,58 @@ function LoginForm() {
               {busy === "password" ? "Signing in…" : "Sign in with Supabase"}
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setShowForgotPassword((value) => !value);
+                setForgotError(null);
+                setForgotMessage(null);
+                if (!showForgotPassword && !forgotEmail) setForgotEmail(email);
+              }}
+              className="text-sm font-medium text-rose-700 hover:text-rose-800"
+            >
+              {showForgotPassword ? "Back to sign in" : "Forgot password?"}
+            </button>
+          </div>
+
+          {showForgotPassword ? (
+            <form onSubmit={handleForgotPassword} className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <label htmlFor="forgot-email" className="block text-sm font-medium text-slate-700">
+                  Email for password reset
+                </label>
+                <input
+                  id="forgot-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={forgotEmail}
+                  onChange={(event) => setForgotEmail(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-rose-500"
+                  placeholder="you@example.com"
+                />
+              </div>
+              {forgotMessage ? (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700" role="status">
+                  {forgotMessage}
+                </p>
+              ) : null}
+              {forgotError ? (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">
+                  {forgotError}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={forgotBusy}
+                className="w-full rounded-lg border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                {forgotBusy ? "Sending reset link…" : "Send password reset link"}
+              </button>
+            </form>
+          ) : null}
 
           {isDevLoginEnabled() ? (
             <div className="mt-7 border-t border-slate-200 pt-6">

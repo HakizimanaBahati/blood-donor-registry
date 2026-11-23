@@ -51,7 +51,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the ERD and request seque
 ## Repository layout
 
 ```text
-backend/     Django project, JWT auth, RBAC, serializers, services, 64 tests
+backend/     Django project, JWT auth, RBAC, serializers, services, 98 tests
 frontend/    Next.js App Router pages, components, API client, Vitest tests
 supabase/    Migrations, RLS, fictional seed data and SQL verification script
 scripts/     Isolated local PostgreSQL cluster + migration runner
@@ -123,8 +123,9 @@ service-role key, JWT secret or database URL in `frontend/.env*`.
 For a hosted project, also set `SUPABASE_URL` (and optionally `SUPABASE_JWKS_URL`) in
 `backend/.env` so Django can verify real access tokens. The Python backend does **not** use
 `@supabase/server` or a Supabase secret key: it verifies JWTs directly against the project
-JWKS endpoint. Set `DATABASE_URL` to the Supabase Postgres connection string only when the
-database password is available.
+JWKS endpoint. Set `DATABASE_URL` to the Supabase Postgres connection string when the
+database password is available. Django tests always use `TEST_DATABASE_URL` (the isolated
+local cluster) via the custom test runner, so they can never touch hosted data.
 
 ### 5. Offline demo login
 
@@ -141,6 +142,16 @@ This endpoint is development-only and returns a locally signed token so the whol
 browser → Django → database flow can be demonstrated without Supabase credentials. Real
 deployments must disable it and use Supabase Auth.
 
+### Password recovery
+
+With a real Supabase project configured, the login page offers **Forgot password?**.
+It calls Supabase Auth `resetPasswordForEmail` with a generic success message that does
+not reveal whether an account exists. Supabase redirects to `/auth/callback`, which
+exchanges the code for a session and places the app in a dedicated `recovery` state.
+`/auth/reset-password` then accepts a new password, calls `updateUser`, and redirects to
+the role dashboard after the server profile is refreshed. Invalid or expired links are
+handled with safe, generic messages; no tokens or password values are logged.
+
 ### Hosted Supabase
 
 To move the schema and data into your own Supabase project without sharing database credentials,
@@ -152,11 +163,11 @@ role-assignment SQL for real Auth users, and verification queries for the SQL Ed
 | Check | Command | Expected result |
 |---|---|---|
 | SQL schema + RLS | `.\scripts\apply-local-migrations.ps1` | `ALL DATABASE ASSERTIONS PASSED` |
-| Backend | `Push-Location backend; & "..\.venv\Scripts\python.exe" manage.py test --verbosity 1; Pop-Location` | `Ran 64 tests ... OK` |
+| Backend | `Push-Location backend; & "..\.venv\Scripts\python.exe" manage.py test --verbosity 1 --noinput; Pop-Location` | `Ran 98 tests ... OK` |
 | Frontend types | `Push-Location frontend; npm run typecheck; Pop-Location` | no errors |
 | Frontend lint | `Push-Location frontend; npm run lint; Pop-Location` | no errors |
-| Frontend tests | `Push-Location frontend; npm test; Pop-Location` | 4 files, 11 tests passed |
-| Frontend build | `Push-Location frontend; npm run build; Pop-Location` | 13 routes generated |
+| Frontend tests | `Push-Location frontend; npm test; Pop-Location` | 6 files, 27 tests passed |
+| Frontend build | `Push-Location frontend; npm run build; Pop-Location` | 15 routes generated |
 | API smoke checks | see [`docs/CURL_TESTS.md`](docs/CURL_TESTS.md) | 200 search; 400 ineligible donor |
 
 ## Roles and permissions
@@ -211,9 +222,7 @@ Full request/response schemas and error envelopes are in
 
 ## Known limitations
 
-- Real Supabase Auth sign-in could not be exercised because no Supabase project was
-  provided. JWT verification code supports both HS256 secrets and JWKS-based RS256/ES256.
 - The dev-login endpoint must remain disabled outside local development.
 - The 90-day rule is a registry screen, not clinical eligibility.
-- No git commit has been made; all files are currently uncommitted in the dedicated
-  repository inside this folder.
+- Password recovery requires Supabase Auth email settings including an allowed
+  redirect URL for `/auth/callback`.

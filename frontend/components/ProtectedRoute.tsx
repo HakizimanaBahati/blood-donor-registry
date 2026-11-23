@@ -23,10 +23,14 @@ export function ProtectedRoute({
       const next = encodeURIComponent(pathname || "/");
       router.replace(`/login?next=${next}`);
     }
+    if (status === "recovery") {
+      router.replace("/auth/reset-password");
+    }
   }, [status, pathname, router]);
 
   if (status === "loading") return <LoadingState label="Checking your session…" />;
   if (status === "unauthenticated") return <LoadingState label="Redirecting to sign in…" />;
+  if (status === "recovery") return <LoadingState label="Redirecting to password reset…" />;
   if (!profile) return <AccessDeniedState />;
   if (allowedRoles && !allowedRoles.includes(profile.role)) return <AccessDeniedState />;
 

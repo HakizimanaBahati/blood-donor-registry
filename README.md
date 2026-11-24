@@ -211,6 +211,7 @@ Full request/response schemas and error envelopes are in
 - [Bug report template](docs/BUG_REPORT_TEMPLATE.md)
 - [Break-it challenge](docs/BREAK_IT_CHALLENGE.md)
 - [Supabase SQL notes](supabase/README.md)
+- [Production deployment runbook](docs/DEPLOYMENT.md)
 
 ## Security and hygiene
 
